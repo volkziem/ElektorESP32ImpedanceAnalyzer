@@ -1,0 +1,183 @@
+<!DOCTYPE HTML>
+<HTML lang="en">
+<head>
+  <title>ESP32 Impedance Analyzer</title>
+  <meta charset="UTF-8">
+  <style>
+    #displayarea { border: 1px solid black; }
+    #trace0 { fill: none; stroke: red; stroke-width: 2px;}
+    #trace1 { fill: none; stroke: black; stroke-width: 1px;}
+    #ip {float: right;}
+  </style>
+</head>
+<body>
+<P> ESP32 Impedance Analyzer:
+    <button id="sweep" type="button" onclick="sweep();">Sweep</button>   
+    <button id="clear" type="button" onclick="cleardisplay();">Clear</button>
+    <button id="calib" type="button" onclick="save_calibration();">Save Calibration</button>
+    <A id='ip'>IP address</A>
+</P>
+<P> Parameters:
+    <SELECT onchange="setDacFreqMin(this.value);">
+      <OPTGROUP label="Sweep start frequency">
+	<OPTION value="1000">Fmin = 1 kHz</OPTION>  	
+	<OPTION value="2000">Fmin = 2 kHz</OPTION>  	
+	<OPTION value="5000">Fmin = 5 kHz</OPTION>  	
+	<OPTION selected="selected" value="10000">Fmin = 10 kHz</OPTION>  	
+	<OPTION value="20000">Fmin = 20 kHz</OPTION>  	
+	<OPTION value="50000">Fmin = 50 kHz</OPTION>  	
+      </OPTGROUP>
+    </SELECT>
+    <SELECT onchange="setDacFreqMax(this.value);">
+      <OPTGROUP label="Sweep maximum frequency">
+	<OPTION value="2000">Fmax = 2 kHz</OPTION>  	
+	<OPTION value="5000">Fmax = 5 kHz</OPTION>  	
+	<OPTION value="10000">Fmax = 10 kHz</OPTION>  	
+	<OPTION value="20000">Fmax = 20 kHz</OPTION>  	
+	<OPTION selected="selected" value="50000">Fmax = 50 kHz</OPTION>  	
+	<OPTION value="70000">Fmax = 70 kHz</OPTION>  	
+	<OPTION value="100000">Fmax = 100 kHz</OPTION>  	
+      </OPTGROUP>
+    </SELECT>
+    <SELECT onchange="setDacFreqStep(this.value);">
+      <OPTGROUP label="Sweep frequency step size">
+	<OPTION value="100">Fstep = 100 Hz</OPTION>  	
+	<OPTION value="200">Fstep = 200 Hz</OPTION>  	
+	<OPTION value="500">Fstep = 500 Hz</OPTION>  	
+	<OPTION selected="selected" value="1000">Fstep = 1 kHz</OPTION>  	
+	<OPTION value="2000">Fstep = 2 kHz</OPTION>  	
+	<OPTION value="5000">Fstep = 5 kHz</OPTION>  	
+      </OPTGROUP>
+    </SELECT>
+    <SELECT onchange="setDacScale(this.value);">
+      <OPTGROUP label="DAC output scale">
+        <OPTION value="0">1/1 scale</OPTION>  	
+        <OPTION selected="selected" value="1">~1/2 scale</OPTION>  	
+        <OPTION value="2">~1/4 scale</OPTION>  	
+        <OPTION value="3">~1/6 scale</OPTION>  	
+      </OPTGROUP>
+    </SELECT>
+    <SELECT onchange="setSamplePeriod(this.value);">
+      <OPTGROUP label="ADC sampling speed">
+        <OPTION value="20000">20 kSamples/s</OPTION>     
+        <OPTION value="50000">50 kSamples/s</OPTION>     
+        <OPTION value="100000">100 kSamples/s</OPTION>     
+        <OPTION value="200000">200 kSamples/s</OPTION>     
+        <OPTION value="500000">500 kSamples/s</OPTION>     
+        <OPTION selected="selected" value="1000000">1 MSamples/s</OPTION>
+      </OPTGROUP>
+    </SELECT>
+</P>
+<P>
+Estimate  
+<button type="button" onclick="setMMode(100);">Capacitance</button>
+<button type="button" onclick="setMMode(101);">Resistance</button>
+<button type="button" onclick="setMMode(102);">Inductance</button>
+</P>
+<details open>
+  <summary>Impedance versus frequency</summary>
+  <svg id="displayarea" width="1024px" height="512px">
+    <path id="trace0" d="M0 200" />
+    <path id="trace1" d="M0 200" />
+  </svg>
+</details>
+
+<div id="status">Status window</div>
+<div id="reply">Reply from ESP32</div>
+<!-- ................................................................................. -->
+<script>
+   var pixmax=-1,fmin=10000,fmax=50000,fstep=1000;;
+   var ipaddr='127.0.0.1:81';   // websock port of ESP32, normally xx.xx.xx.xx:81
+   var ipaddr=location.hostname + ":81";   
+   var getQueryString= function(field) {
+      var reg = new RegExp("[?&]" + field + "=([^&#]*)", "i");
+      var string=reg.exec(window.location.href);
+      return string ? string[1] : null;
+    };
+    iii=getQueryString("ip");  // check whether address is in query string
+    if (iii != null) {ipaddr=iii;}
+    console.log(iii);
+    document.getElementById('ip').innerHTML=ipaddr;
+    var websock = new WebSocket('ws://' + ipaddr);
+    websock.onopen = function(evt) { console.log('websock open'); };
+    websock.onclose = function(evt) {
+      console.log('websock close');
+      toStatus('websock close');
+    };
+    websock.onerror = function(evt) { console.log(evt); toStatus(evt) };
+    function toStatus(txt) {document.getElementById('status').innerHTML=txt; }
+    function toReply(txt) {document.getElementById('reply').innerHTML=txt; }
+    function sweep() {
+      websock.send(JSON.stringify({ "cmd" : "SWEEP", "val" : -1 }));
+    }   
+    function save_calibration() {
+      websock.send(JSON.stringify({ "cmd" : "SAVECALIB", "val" : -1 }));
+    }
+    websock.onmessage=function(event) {
+      console.log(event);
+      var stuff=JSON.parse(event.data);
+      var val=stuff["INFO"]; //..............................info
+      if ( val != undefined ) {toReply(val);}
+      var val=stuff["WF0"];  //..........................waveform0
+      if ( val != undefined ) {
+        nstep=Math.floor(0.5+1024/val.length)
+        pixmax=nstep*val.length;
+        var d="M0 511";
+        for (i=0; i<val.length; i++) {d += ' L' + (nstep*i) + ' ' + (512-val[i]);} 
+	document.getElementById('trace0').setAttribute('d',d);
+        d="M0 480 L1024 480";
+        document.getElementById('trace1').setAttribute('d',d);
+      }			
+    }  
+//..................................................
+    function cleardisplay() {
+      dd = "M0 512"; 
+      document.getElementById('trace0').setAttribute('d',dd);
+      document.getElementById('trace1').setAttribute('d',dd);
+      current_position=0;
+    }
+//....................................Minimum sweep frequency
+    function setDacFreqMin(f) {
+      fmin=f;
+      toStatus("Setting FreqMin to "+ f + " Hz");
+      websock.send(JSON.stringify({ "cmd" : "FMIN", "val" : f }));			
+    } 
+//....................................Maximum sweep frequency
+    function setDacFreqMax(f) {
+      fmax=f;
+      toStatus("Setting FreqMax to "+ f + " Hz");
+      websock.send(JSON.stringify({ "cmd" : "FMAX", "val" : f }));			
+    } 
+//....................................Sweep frequency step size
+    function setDacFreqStep(f) {
+      fstep=f;
+      toStatus("Setting FreqStep to "+ f + " Hz");
+      websock.send(JSON.stringify({ "cmd" : "FSTEP", "val" : f }));			
+    } 
+//....................................Sweep frequency step size
+    function setDacScale(f) {
+      toStatus("Setting DAC scale to "+ f );
+      websock.send(JSON.stringify({ "cmd" : "SCALE", "val" : f }));			
+    } 
+//....................................setSamplePeriod
+    function setSamplePeriod(f) {
+      toStatus("Setting Samples per second to "+ f);
+      websock.send(JSON.stringify({ "cmd" : "SAMP", "val" : f }));			
+    } 
+//....................................setMMode
+    function setMMode(f) {
+      toStatus("Setting special mode to " + f);
+      websock.send(JSON.stringify({ "cmd" : "MMODE", "val" : f }));			
+    } 
+//..................................................
+    document.getElementById("displayarea").addEventListener('mousedown',showCoordinates, false);
+    function showCoordinates(event) {
+      rect=document.getElementById("displayarea").getBoundingClientRect();
+      xpix=event.clientX-rect.left;
+      f=(xpix*fmax+(pixmax-xpix)*fmin)/(pixmax*1e3);
+      toStatus("Mouse position: f=" + f.toFixed(1) + " kHz,   R/Rcal = " 
+              + ((rect.height-event.clientY+rect.top)/32).toFixed(2));
+    }
+</script>
+</body>
+</HTML>  
