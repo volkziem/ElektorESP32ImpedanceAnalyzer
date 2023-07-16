@@ -15,4 +15,9 @@ Have fun!
 - for the [Data Acquisition Pods](https://github.com/volkziem/EpicsDaqPods) using the ESP-01;
 - for the [Geoscope](https://github.com/volkziem/GeoScope) to fingerprint vibrations;
 
-and my webpage with more [gadgets](https://ziemann.web.cern.ch/ziemann/gadget/).
+## my webpage 
+with more [gadgets](https://ziemann.web.cern.ch/ziemann/gadget/);
+
+## on Elektor-labs
+[ESP32-DAQ](https://www.elektormagazine.de/labs/esp32-daq-controlling-the-esp32-via-websockets-from-a-browser), an ESP32-based Oscilloscope.
+
