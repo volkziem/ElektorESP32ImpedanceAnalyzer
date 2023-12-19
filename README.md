@@ -1,5 +1,5 @@
 # ElektorESP32ImpedanceAnalyzer
-ESP32 Impedance Analyzer for Elektor magazine. 
+ESP32 Impedance Analyzer for [Elektor magazine Jul/Aug 2023](https://www.elektormagazine.com/magazine/elektor-304/61865). Translations: [NL](https://www.elektormagazine.nl/magazine/elektor-307/61834), [DE](https://www.elektormagazine.de/magazine/elektor-306/61803), [FR](https://www.elektormagazine.fr/magazine/elektor-308/61767).
 
 This repository contains the sources for the project.
 - **nwa2.m** controls the ESP32 via the serial line from octave.
